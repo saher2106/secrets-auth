@@ -5,7 +5,8 @@ const express=require("express");
 const bodyParser=require("body-parser");       
 const ejs=require("ejs");
 const mongoose=require("mongoose");
-const encrypt=require("mongoose-encryption");
+// hash function
+const md5=require("md5");
 
 const app=express();
 
@@ -25,11 +26,6 @@ const userSchema=new mongoose.Schema({
     email:String,
     password:String
 });
-
-
-
-// encrypted field option only encrypts the password and not whole doc
-userSchema.plugin(encrypt,{secret:process.env.SECRET_KEY, encryptedFields:["password"]});
 
 
 //using userSchema to set up new User model
@@ -58,7 +54,7 @@ app.post("/register",function(req,res){
     const newUser=new User({
         //username is the name for email and password for password in register.ejs
         email:req.body.username,        
-        password:req.body.password
+        password:md5(req.body.password)
     });
     //saving the newUser details created on the register page
     newUser.save(function(err){
@@ -77,7 +73,7 @@ app.post("/register",function(req,res){
 // catch the post request for login route when the submit button is pressed for login
 app.post("/login",function(req,res){
     const username=req.body.username;
-    const password=req.body.password;
+    const password=md5(req.body.password);
     // check if the account exists for entered username and password
     // check if email field matching with log in username 
     User.findOne({email:username},function(err,foundUser){
