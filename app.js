@@ -5,8 +5,9 @@ const express=require("express");
 const bodyParser=require("body-parser");       
 const ejs=require("ejs");
 const mongoose=require("mongoose");
-// hash function
-const md5=require("md5");
+// using bcrypt and salting methods
+const bcrypt=require("bcrypt");
+const saltRounds=10;
 
 const app=express();
 
@@ -48,24 +49,27 @@ app.get("/register",function(req,res){
 });
 
 
-//catch the post request of register route when submit button is pressed for email and password
+// catch the post request of register route when submit button is pressed for email and password
 app.post("/register",function(req,res){
-    //creating a user entry using User model
-    const newUser=new User({
-        //username is the name for email and password for password in register.ejs
-        email:req.body.username,        
-        password:md5(req.body.password)
-    });
-    //saving the newUser details created on the register page
-    newUser.save(function(err){
-        // adding a callback function to catch any errors
-        if(err){
-            console.log(err);
-        }
-        // if no errors then only render the secrets page
-        else{
-            res.render("secrets");
-        }
+    // using bcrypt for password hashing
+    bcrypt.hash(req.body.password,saltRounds,function(err,hash){
+        // creating a user entry using User model
+         const newUser=new User({
+            //username is the name for email and password for password in register.ejs
+            email:req.body.username,        
+            password:hash
+        });
+        //saving the newUser details created on the register page
+        newUser.save(function(err){
+            // adding a callback function to catch any errors
+            if(err){
+                console.log(err);
+            }
+            // if no errors then only render the secrets page
+            else{
+                res.render("secrets");
+            }
+        });
     });
 });
 
@@ -73,7 +77,7 @@ app.post("/register",function(req,res){
 // catch the post request for login route when the submit button is pressed for login
 app.post("/login",function(req,res){
     const username=req.body.username;
-    const password=md5(req.body.password);
+    const password=req.body.password;
     // check if the account exists for entered username and password
     // check if email field matching with log in username 
     User.findOne({email:username},function(err,foundUser){
@@ -83,12 +87,15 @@ app.post("/login",function(req,res){
         else{
             // if the user exists with that email, check password
             if(foundUser){
-                if(foundUser.password===password){
-                    res.render("secrets");
-                }
+                // using bcrypt compare method
+                bcrypt.compare(password,foundUser.password,function(err,result){
+                    if(result===true){
+                        res.render("secrets");
+                    }
+                });
             }
         }
-    })
+    });
 });
 
 
