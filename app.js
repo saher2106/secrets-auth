@@ -1,13 +1,14 @@
-//jshint esversion:6
-//importing the required packages
+// jshint esversion:6
+// importing the required packages
 require("dotenv").config();  //at top ,for defining environment variable
 const express=require("express");
 const bodyParser=require("body-parser");       
 const ejs=require("ejs");
 const mongoose=require("mongoose");
-// using bcrypt and salting methods
-const bcrypt=require("bcrypt");
-const saltRounds=10;
+// for hashing and creating sessions
+const session =require("express-session");
+const passport=require("passport");
+const passportLocalMongoose =require("passport-local-mongoose");
 
 const app=express();
 
@@ -17,83 +18,112 @@ app.use(bodyParser.urlencoded({
     extended:true
 }));
 
+// initialising session cookie, position of code imp
+app.use(session({
+    // long string
+    secret:"a long secret sentence",
+    resave:false,
+    saveUninitialized:false
+}))
+
+// initialising passport
+app.use(passport.initialize());
+app.use(passport.session());
+
 // using mongoose to connect to mongodb
 mongoose.connect("mongodb://127.0.0.1:27017/userDB",{useNewUrlParser:true,
 useUnifiedTopology: true});
+mongoose.set("useCreateIndex",true);
 
-//setting up new userDB
-//create a user schema (mongoose schema object with two fields)
+// setting up new userDB
+// create a user schema (mongoose schema object with two fields)
 const userSchema=new mongoose.Schema({
     email:String,
     password:String
 });
 
+// using passport-local-mongoose
+userSchema.plugin(passportLocalMongoose);
 
-//using userSchema to set up new User model
+// using userSchema to set up new User model
 const User= new mongoose.model("User",userSchema);
 
+// for serialising and deserialising cookies
+passport.use(User.createStrategy());
+passport.serializeUser(User.serializeUser());
+passport.deserializeUser(User.deserializeUser());
 
-//for rendering home.ejs
+// for rendering home.ejs
 app.get("/",function(req,res){      
     res.render("home");
 });
 
-//for rendering login page
+// for rendering login page
 app.get("/login",function(req,res){     
     res.render("login");
 });
 
-//for rendering register.ejs
+// for rendering register.ejs
 app.get("/register",function(req,res){      
     res.render("register");
 });
 
+// for rendering secrets page if user authenticated
+app.get("/secrets",function(req, res){
+    if (req.isAuthenticated()){
+        res.render("secrets");
+    }
+    else{
+        // if not authenticated then login first
+        res.redirect("/login");
+    }
+});
+
+// route to logout
+app.get("/logout", function(req, res){
+    req.logout(function(err){
+        if(err){
+            console.log(err);
+        }
+        else{
+            res.redirect("/");
+        }
+    }); 
+});
 
 // catch the post request of register route when submit button is pressed for email and password
 app.post("/register",function(req,res){
-    // using bcrypt for password hashing
-    bcrypt.hash(req.body.password,saltRounds,function(err,hash){
-        // creating a user entry using User model
-         const newUser=new User({
-            //username is the name for email and password for password in register.ejs
-            email:req.body.username,        
-            password:hash
-        });
-        //saving the newUser details created on the register page
-        newUser.save(function(err){
-            // adding a callback function to catch any errors
-            if(err){
-                console.log(err);
-            }
-            // if no errors then only render the secrets page
-            else{
-                res.render("secrets");
-            }
-        });
+    // from passport-local-mongoose package 
+    User.register({username: req.body.username},req.body.password,function(err,user){
+        if(err){
+            console.log(err);
+            res.redirect("/register");
+        }
+        else{
+            passport.authenticate("local")(req, res, function(){
+                res.redirect("/secrets");
+            });
+        }
     });
 });
 
 
 // catch the post request for login route when the submit button is pressed for login
 app.post("/login",function(req,res){
-    const username=req.body.username;
-    const password=req.body.password;
-    // check if the account exists for entered username and password
-    // check if email field matching with log in username 
-    User.findOne({email:username},function(err,foundUser){
+    // creating new user
+    const user=new User({
+        username: req.body.username,
+        password: req.body.password
+    });
+    // using passport to login
+    req.login(user, function(err){
         if(err){
             console.log(err);
         }
         else{
-            // if the user exists with that email, check password
-            if(foundUser){
-                // using bcrypt compare method
-                bcrypt.compare(password,foundUser.password,function(err,result){
-                    if(result===true){
-                        res.render("secrets");
-                    }
-                });
-            }
+            passport.authenticate("local")(req, res, function(){
+                res.redirect("/secrets");
+            });
         }
     });
 });
