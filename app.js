@@ -42,7 +42,8 @@ mongoose.set("useCreateIndex",true);
 const userSchema=new mongoose.Schema({
     email:String,
     password:String,
-    googleId:String
+    googleId:String,
+    secret:String
 });
 
 // using passport-local-mongoose
@@ -119,14 +120,54 @@ app.get("/register",function(req,res){
 
 // for rendering secrets page if user authenticated
 app.get("/secrets",function(req, res){
+    // no need to authenticate as anyone can see
+    // check if field secret has a value ie not null
+    User.find({"secret": {$ne:null}}, function(err, foundUsers){
+        if(err){
+            console.log(err);
+        }
+        else{
+            // if a user is found who submitted a secret then get secrets page and pass a variable with value equal to foundusers
+            // pick the variable in secrets page
+            if(foundUsers){
+                res.render("secrets",{usersWithSecrets: foundUsers});
+            }
+        }
+    });
+});
+
+// route to submit secrets button
+app.get("/submit", function(req, res){
+    // check to see if user is logged in, if yes then render submit page
     if (req.isAuthenticated()){
-        res.render("secrets");
+        res.render("submit");
     }
     else{
         // if not authenticated then login first
         res.redirect("/login");
     }
 });
+
+// to post the submitted secret on submit page
+app.post("/submit", function(req, res){
+    // input name is secret
+    const submittedsecret=req.body.secret;
+    // add the submitted secret to the secret field created in the schema
+    User.findById(req.user.id, function(err, foundUser){
+        if(err){
+            console.log(err);
+        }
+        else{
+            if(foundUser){
+                foundUser.secret=submittedsecret;
+                foundUser.save(function(){
+                    res.redirect("/secrets");
+                });
+            }
+        }
+    });
+});
+
 
 // route to logout
 app.get("/logout", function(req, res){
